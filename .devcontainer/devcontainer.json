@@ -1,0 +1,6 @@
+{
+  "name": "pokered-palmos",
+  "build": { "dockerfile": "Dockerfile" },
+  "postCreateCommand": "make -C tools/ || true && rgbasm -V || true",
+  "remoteUser": "vscode"
+}
