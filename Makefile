@@ -189,3 +189,21 @@ gfx/trade/game_boy.2bpp: tools/gfx += --remove-duplicates
 
 %.pic: %.2bpp
 	tools/pkmncompress $< $@
+
+# Helpers
+ROM ?= pokered.gbc
+.PHONY: rominfo zipdist ch2
+
+rominfo:
+	@python3 tools/gbc_header.py $(ROM)
+
+zipdist:
+	@mkdir -p dist
+	@zip -j "dist/pokered_build_`date +%Y%m%d_%H%M%S`.zip" dist/*.gbc dist/*.sha1
+	@ls -lh dist/ | sed -n '1,50p'
+
+ch2:
+	$(MAKE) clean
+	$(MAKE) pokered.gbc CH_MASK=0x22 STRICT_MUTE=1 SOFT_PAN=1
+	@mkdir -p dist && mv -f pokered.gbc dist/pokered_CH2_strict.gbc
+	@sha1sum dist/pokered_CH2_strict.gbc | tee dist/pokered_CH2_strict.gbc.sha1

@@ -1,0 +1,75 @@
+name: Build ROMs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config bison flex libpng-dev zlib1g-dev python3 zip
+
+      - name: Cache rgbds source/build
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/rgbds-build
+          key: ${{ runner.os }}-rgbds-cache-v1
+
+      - name: Build & install RGBDS
+        run: |
+          set -eux
+          mkdir -p ~/.cache/rgbds-build
+          cd ~/.cache/rgbds-build
+          if [ ! -d rgbds ]; then
+            git clone --depth=1 https://github.com/gbdev/rgbds.git
+          fi
+          cd rgbds
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+          sudo cmake --install build
+          rgbasm -V
+
+      - name: Build tools
+        run: make -C tools/
+
+      - name: Build ROM variants
+        run: |
+          set -eux
+          mkdir -p dist
+          make clean && make pokered.gbc
+          sha1sum pokered.gbc | tee dist/pokered.gbc.sha1
+          cp -f pokered.gbc dist/
+
+          make pokeblue.gbc
+          sha1sum pokeblue.gbc | tee dist/pokeblue.gbc.sha1
+          cp -f pokeblue.gbc dist/
+
+          # CH2 only (strict)
+          make clean && make pokered.gbc CH_MASK=0x22 STRICT_MUTE=1 SOFT_PAN=1
+          cp -f pokered.gbc dist/pokered_CH2_strict.gbc
+          sha1sum dist/pokered_CH2_strict.gbc | tee dist/pokered_CH2_strict.gbc.sha1
+
+      - name: ROM header check
+        run: |
+          python3 tools/gbc_header.py dist/pokered.gbc
+          python3 tools/gbc_header.py dist/pokeblue.gbc
+          python3 tools/gbc_header.py dist/pokered_CH2_strict.gbc
+
+      - name: Zip dist
+        run: |
+          (cd dist && zip -r ../pokered_build_${{ github.sha }}.zip .)
+          ls -lh pokered_build_${{ github.sha }}.zip
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokered-palmos-${{ github.sha }}
+          path: |
+            pokered_build_${{ github.sha }}.zip
+            dist/*
